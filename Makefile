@@ -63,6 +63,10 @@ rust-native: $(LIB_DIR)/native
 	cd $(RUST_DIR) && cargo build --release --target $(RUST_NATIVE_TARGET)
 	cp $(RUST_DIR)/target/$(RUST_NATIVE_TARGET)/release/$(LIB_NAME) $(LIB_DIR)/native/$(LIB_NAME)
 
+lint:
+	@echo "Linting code..."
+	cd $(RUST_DIR) && cargo clippy -- -D warnings
+
 # Run tests
 test: rust-$(NATIVE_ARCH)
 	@echo "Running Rust tests..."
