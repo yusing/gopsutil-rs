@@ -67,7 +67,7 @@ jobs:
         with:
           name: libgopsutil-rs-${{ matrix.arch }}
           path: |
-            target/lib/native/libgopsutil_rs.a
+            target/lib/native/libgopsutil_rs.so
 
   release:
     name: Create Release
@@ -87,8 +87,8 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p release
-          cp artifacts/libgopsutil-rs-amd64/target/lib/native/libgopsutil_rs.a release/libgopsutil_rs-linux-amd64.a
-          cp artifacts/libgopsutil-rs-arm64/target/lib/native/libgopsutil_rs.a release/libgopsutil_rs-linux-arm64.a
+          cp artifacts/libgopsutil-rs-amd64/target/lib/native/libgopsutil_rs.so release/libgopsutil_rs-linux-amd64.so
+          cp artifacts/libgopsutil-rs-arm64/target/lib/native/libgopsutil_rs.so release/libgopsutil_rs-linux-arm64.so
 
           # Create checksums
           cd release
@@ -100,8 +100,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: release/libgopsutil_rs-linux-amd64.a
-          asset_name: libgopsutil_rs-linux-amd64.a
+          asset_path: release/libgopsutil_rs-linux-amd64.so
+          asset_name: libgopsutil_rs-linux-amd64.so
           asset_content_type: application/octet-stream
 
       - name: Upload release assets (ARM64)
@@ -110,8 +110,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: release/libgopsutil_rs-linux-arm64.a
-          asset_name: libgopsutil_rs-linux-arm64.a
+          asset_path: release/libgopsutil_rs-linux-arm64.so
+          asset_name: libgopsutil_rs-linux-arm64.so
           asset_content_type: application/octet-stream
 
       - name: Upload checksums
