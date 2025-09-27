@@ -1,0 +1,125 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  release:
+    types: [published]
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    strategy:
+      matrix:
+        include:
+          # Native amd64 build on GitHub hosted runner
+          - os: ubuntu-latest
+            arch: amd64
+            target: x86_64-unknown-linux-gnu
+          # Native arm64 build on GitHub hosted ARM64 runner
+          - os: ubuntu-24.04-arm
+            arch: arm64
+            target: aarch64-unknown-linux-gnu
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rs/target
+          key: ${{ runner.os }}-${{ matrix.arch }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.arch }}-cargo-
+
+      - name: Install dependencies
+        run: |
+          cd rs && cargo fetch
+
+      - name: Format check (Rust)
+        run: |
+          cd rs && cargo fmt --all -- --check
+
+      - name: Lint (Rust)
+        run: |
+          cd rs && cargo clippy -- -D warnings
+
+      - name: Build Rust library for ${{ matrix.arch }}
+        run: |
+          make rust-native
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: libgopsutil-rs-${{ matrix.arch }}
+          path: |
+            target/lib/native/libgopsutil_rs.a
+
+  release:
+    name: Create Release
+    if: github.event_name == 'release'
+    needs: build-and-test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+          cp artifacts/libgopsutil-rs-amd64/target/lib/native/libgopsutil_rs.a release/libgopsutil_rs-linux-amd64.a
+          cp artifacts/libgopsutil-rs-arm64/target/lib/native/libgopsutil_rs.a release/libgopsutil_rs-linux-arm64.a
+
+          # Create checksums
+          cd release
+          sha256sum * > checksums.txt
+
+      - name: Upload release assets
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: release/libgopsutil_rs-linux-amd64.a
+          asset_name: libgopsutil_rs-linux-amd64.a
+          asset_content_type: application/octet-stream
+
+      - name: Upload release assets (ARM64)
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: release/libgopsutil_rs-linux-arm64.a
+          asset_name: libgopsutil_rs-linux-arm64.a
+          asset_content_type: application/octet-stream
+
+      - name: Upload checksums
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: release/checksums.txt
+          asset_name: checksums.txt
+          asset_content_type: text/plain
