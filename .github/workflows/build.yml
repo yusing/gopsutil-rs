@@ -1,12 +1,12 @@
 name: Build and Test
 
 on:
-  # push:
-  #   branches: [main, develop]
-  # pull_request:
-  #   branches: [main, develop]
-  release:
-    types: [published]
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
 
 jobs:
   build-and-test:
@@ -62,64 +62,13 @@ jobs:
         run: |
           make rust-native
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: libgopsutil-rs-${{ matrix.arch }}
-          path: |
-            target/lib/native/libgopsutil_rs.so
-
-  release:
-    name: Create Release
-    if: github.event_name == 'release'
-    needs: build-and-test
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Prepare release assets
+      - name: Upload to release if tag push
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mkdir -p release
-          cp artifacts/libgopsutil-rs-amd64/target/lib/native/libgopsutil_rs.so release/libgopsutil_rs-linux-amd64.so
-          cp artifacts/libgopsutil-rs-arm64/target/lib/native/libgopsutil_rs.so release/libgopsutil_rs-linux-arm64.so
+          # Rename the file with architecture suffix
+          cp target/lib/native/libgopsutil_rs.so libgopsutil_rs-linux-${{ matrix.arch }}.so
 
-          # Create checksums
-          cd release
-          sha256sum * > checksums.txt
-
-      - name: Upload release assets
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: release/libgopsutil_rs-linux-amd64.so
-          asset_name: libgopsutil_rs-linux-amd64.so
-          asset_content_type: application/octet-stream
-
-      - name: Upload release assets (ARM64)
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: release/libgopsutil_rs-linux-arm64.so
-          asset_name: libgopsutil_rs-linux-arm64.so
-          asset_content_type: application/octet-stream
-
-      - name: Upload checksums
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: release/checksums.txt
-          asset_name: checksums.txt
-          asset_content_type: text/plain
+          # Upload to release
+          gh release upload ${{ github.ref_name }} libgopsutil_rs-linux-${{ matrix.arch }}.so --clobber
