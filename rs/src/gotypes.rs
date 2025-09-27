@@ -34,7 +34,7 @@ pub struct GoString {
 // &GoString -> &OsStr
 impl From<&GoString> for &OsStr {
     fn from(go_string: &GoString) -> Self {
-        unsafe { &OsStr::from_bytes(slice::from_raw_parts(go_string.p, go_string.n as usize)) }
+        unsafe { OsStr::from_bytes(slice::from_raw_parts(go_string.p, go_string.n as usize)) }
     }
 }
 

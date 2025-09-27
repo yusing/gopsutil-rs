@@ -85,20 +85,17 @@ pub extern "C" fn gopsutil_disk_usage_by_partition(
     match psutil::disk::partitions_physical() {
         Ok(partitions) => {
             for partition in &partitions {
-                match psutil::disk::disk_usage(partition.mountpoint()) {
-                    Ok(usage) => {
-                        let stats = &DiskUsageStat {
-                            device: partition.device().into(),
-                            path: partition.mountpoint().into(),
-                            fstype: partition.filesystem().as_str().into(),
-                            total: usage.total(),
-                            free: usage.free(),
-                            used: usage.used(),
-                            used_percent: usage.percent(),
-                        };
-                        out_fn(&partition.mountpoint().into(), stats);
-                    }
-                    Err(_) => {}
+                if let Ok(usage) = psutil::disk::disk_usage(partition.mountpoint()) {
+                    let stats = &DiskUsageStat {
+                        device: partition.device().into(),
+                        path: partition.mountpoint().into(),
+                        fstype: partition.filesystem().as_str().into(),
+                        total: usage.total(),
+                        free: usage.free(),
+                        used: usage.used(),
+                        used_percent: usage.percent(),
+                    };
+                    out_fn(&partition.mountpoint().into(), stats);
                 }
             }
             true
@@ -129,18 +126,15 @@ trait DiskIOCalculator {
         let last_time = self.get_last_time();
         let elapsed = ts.duration_since(last_time);
         let name: &str = (&io.name).into();
-        match self.get_last_counters().get(name) {
-            Some(counters) => {
-                io.read_speed =
-                    ((io.read_bytes - counters.read_bytes()) as f32) / elapsed.as_secs_f32();
-                io.write_speed =
-                    ((io.write_bytes - counters.write_bytes()) as f32) / elapsed.as_secs_f32();
-                // just in case, use abs_diff instead of -
-                let rps = io.read_count.abs_diff(counters.read_count()) / elapsed.as_secs();
-                let wps = io.write_count.abs_diff(counters.write_count()) / elapsed.as_secs();
-                io.iops = rps + wps;
-            }
-            None => {}
+        if let Some(counters) = self.get_last_counters().get(name) {
+            io.read_speed =
+                ((io.read_bytes - counters.read_bytes()) as f32) / elapsed.as_secs_f32();
+            io.write_speed =
+                ((io.write_bytes - counters.write_bytes()) as f32) / elapsed.as_secs_f32();
+            // just in case, use abs_diff instead of -
+            let rps = io.read_count.abs_diff(counters.read_count()) / elapsed.as_secs();
+            let wps = io.write_count.abs_diff(counters.write_count()) / elapsed.as_secs();
+            io.iops = rps + wps;
         }
     }
 }
