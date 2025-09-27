@@ -116,11 +116,34 @@ pub struct DiskIOCountersStat {
     write_speed: f32,
 }
 
-trait DiskIOCalculator {
-    fn get_last_counters(&self) -> &HashMap<String, DiskIoCounters>;
-    fn get_last_time(&self) -> Instant;
-    fn set_last_counters(&mut self, counters: HashMap<String, DiskIoCounters>);
-    fn set_last_time(&mut self, time: Instant);
+struct DiskIOState {
+    last_counters: HashMap<String, DiskIoCounters>,
+    last_time: Instant,
+}
+
+impl DiskIOState {
+    fn new() -> Self {
+        Self {
+            last_counters: HashMap::new(),
+            last_time: Instant::now(),
+        }
+    }
+
+    fn get_last_counters(&self) -> &HashMap<String, DiskIoCounters> {
+        &self.last_counters
+    }
+
+    fn get_last_time(&self) -> Instant {
+        self.last_time
+    }
+
+    fn set_last_counters(&mut self, counters: HashMap<String, DiskIoCounters>) {
+        self.last_counters = counters;
+    }
+
+    fn set_last_time(&mut self, time: Instant) {
+        self.last_time = time;
+    }
 
     fn calc_io(&self, io: &mut DiskIOCountersStat, ts: Instant) {
         let last_time = self.get_last_time();
@@ -136,38 +159,6 @@ trait DiskIOCalculator {
             let wps = io.write_count.abs_diff(counters.write_count()) / elapsed.as_secs();
             io.iops = rps + wps;
         }
-    }
-}
-
-struct DiskIOState {
-    last_counters: HashMap<String, DiskIoCounters>,
-    last_time: Instant,
-}
-
-impl DiskIOState {
-    fn new() -> Self {
-        Self {
-            last_counters: HashMap::new(),
-            last_time: Instant::now(),
-        }
-    }
-}
-
-impl DiskIOCalculator for DiskIOState {
-    fn get_last_counters(&self) -> &HashMap<String, DiskIoCounters> {
-        &self.last_counters
-    }
-
-    fn get_last_time(&self) -> Instant {
-        self.last_time
-    }
-
-    fn set_last_counters(&mut self, counters: HashMap<String, DiskIoCounters>) {
-        self.last_counters = counters;
-    }
-
-    fn set_last_time(&mut self, time: Instant) {
-        self.last_time = time;
     }
 }
 
