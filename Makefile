@@ -41,27 +41,18 @@ rust-setup:
 	@rustup target list --installed | grep -q $(RUST_AMD64_TARGET) || rustup target add $(RUST_AMD64_TARGET)
 	@rustup target list --installed | grep -q $(RUST_ARM64_TARGET) || rustup target add $(RUST_ARM64_TARGET)
 
-# Build Rust library for amd64
-rust-amd64: $(AMD64_LIB)
-$(AMD64_LIB): $(LIB_DIR)/amd64 rust-setup
-	@echo "Building Rust library for amd64..."
-	cd $(RUST_DIR) && cargo build --release --target $(RUST_AMD64_TARGET)
-	cp $(RUST_DIR)/target/$(RUST_AMD64_TARGET)/release/$(LIB_NAME) $@
 
-# Build Rust library for arm64  
-rust-arm64: $(ARM64_LIB)
-$(ARM64_LIB): $(LIB_DIR)/arm64 rust-setup
-	@echo "Building Rust library for arm64..."
-	cd $(RUST_DIR) && cargo build --release --target $(RUST_ARM64_TARGET)
-	cp $(RUST_DIR)/target/$(RUST_ARM64_TARGET)/release/$(LIB_NAME) $@
-
-rust: rust-native
+go-run:
+	@echo "Running main.go"
+	go run -ldflags='-checklinkname=0' cmd/gopsutil/main.go
 
 # Build Rust library for native architecture
-rust-native: $(LIB_DIR)/native
+rust: $(LIB_DIR)/native
 	@echo "Building Rust library for native architecture ($(NATIVE_ARCH))..."
 	cd $(RUST_DIR) && cargo build --release --target $(RUST_NATIVE_TARGET)
 	cp $(RUST_DIR)/target/$(RUST_NATIVE_TARGET)/release/$(LIB_NAME) $(LIB_DIR)/native/$(LIB_NAME)
+
+rust-native: rust
 
 lint:
 	@echo "Linting code..."

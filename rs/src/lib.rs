@@ -79,7 +79,8 @@ pub extern "C" fn gopsutil_disk_usage(path: &GoString, out: &mut DiskUsageStat) 
 
 #[unsafe(no_mangle)]
 pub extern "C" fn gopsutil_disk_usage_by_partition(
-    yield_fn: extern "C" fn(&GoString, &DiskUsageStat),
+    m: gotypes::GoMapHeader,
+    m_type: gotypes::GoMapType,
 ) -> bool {
     match psutil::disk::partitions_physical() {
         Ok(partitions) => {
@@ -94,7 +95,12 @@ pub extern "C" fn gopsutil_disk_usage_by_partition(
                         used: usage.used(),
                         used_percent: usage.percent(),
                     };
-                    yield_fn(&partition.mountpoint().into(), stats);
+                    gotypes::go_strmap_set(
+                        m,
+                        m_type,
+                        &partition.mountpoint().into(),
+                        gotypes::any_to_c_void(stats),
+                    )
                 }
             }
             true
@@ -196,7 +202,8 @@ fn should_exclude_disk(name: &str) -> bool {
 #[unsafe(no_mangle)]
 #[allow(static_mut_refs)]
 pub extern "C" fn gopsutil_disk_io_counters_by_partition(
-    yield_fn: extern "C" fn(&GoString, &DiskIOCountersStat),
+    m: gotypes::GoMapHeader,
+    m_type: gotypes::GoMapType,
 ) -> bool {
     match unsafe { DISK_IO_COUNTERS_COLLECTOR.disk_io_counters_per_partition() } {
         Ok(partitions) => {
@@ -216,7 +223,12 @@ pub extern "C" fn gopsutil_disk_io_counters_by_partition(
                     // write_speed: 0.0,
                 };
                 // unsafe { DISK_IO_STATE.calc_io(counters, now) };
-                yield_fn(&partition.into(), counters);
+                gotypes::go_strmap_set(
+                    m,
+                    m_type,
+                    &partition.into(),
+                    gotypes::any_to_c_void(counters),
+                );
             }
             // unsafe {
             //     DISK_IO_STATE.set_last_counters(partitions);
@@ -326,14 +338,20 @@ pub fn format_sensor_key(sensor: &psutil::sensors::TemperatureSensor) -> String 
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn gopsutil_temperatures(yield_fn: extern "C" fn(&TemperatureStat)) -> bool {
-    for sensor in psutil::sensors::temperatures().into_iter().flatten() {
-        yield_fn(&TemperatureStat {
+pub extern "C" fn gopsutil_temperatures(
+    out: &gotypes::GoSlice<TemperatureStat>,
+    elem_type: &gotypes::GoType,
+) -> bool {
+    let stats: Vec<TemperatureStat> = psutil::sensors::temperatures()
+        .into_iter()
+        .flatten()
+        .map(|sensor| TemperatureStat {
             sensor_key: format_sensor_key(&sensor).into(),
             temperature: sensor.current().celsius() as f32,
             high: sensor.high().map_or(0.0, |t| t.celsius()) as f32,
             critical: sensor.critical().map_or(0.0, |t| t.celsius()) as f32,
-        });
-    }
+        })
+        .collect();
+    gotypes::go_slice_clone_into(out, &stats.into(), elem_type);
     true
 }

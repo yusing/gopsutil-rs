@@ -6,5 +6,6 @@ edition = "2024"
 [lib]
 crate-type = ["cdylib"]
 
+
 [dependencies]
 psutil = { version = "5.4.0", features = ["cpu", "disk", "host", "memory", "network", "process", "sensors"] }

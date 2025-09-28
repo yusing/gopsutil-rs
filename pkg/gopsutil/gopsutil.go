@@ -6,24 +6,24 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"time"
 
 	"github.com/ebitengine/purego"
+	"github.com/yusing/gointernals"
+	"github.com/yusing/gointernals/abi"
 )
 
 // Library holds the loaded library handle and function pointers
 type Library struct {
 	handle uintptr
 
-	// Function pointers
 	cpuPercent           func(out *float32) bool
 	memory               func(out *Memory) bool
 	diskUsage            func(path *string, out *DiskUsageStat) bool
-	diskUsageByPartition func(yield func(*string, *DiskUsageStat)) bool
-	diskIOByPartition    func(yield func(*string, *DiskIOCountersStat)) bool
+	diskUsageByPartition func(m *gointernals.Map, mType *gointernals.MapType) bool
+	diskIOByPartition    func(m *gointernals.Map, mType *gointernals.MapType) bool
 	network              func(out *NetIOCountersStat) bool
-	temperatures         func(yield func(*TemperatureStat)) bool
+	temperatures         func(out *Sensors, elemType *abi.Type) bool
 }
 
 func New() (*Library, error) {
@@ -32,7 +32,7 @@ func New() (*Library, error) {
 		return nil, fmt.Errorf("failed to get library path: %w", err)
 	}
 
-	// Load the library
+	// Load the Rust library
 	handle, err := purego.Dlopen(libPath, purego.RTLD_NOW|purego.RTLD_GLOBAL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load library %s: %w", libPath, err)
@@ -59,22 +59,7 @@ func getStaticLibraryPath() (string, error) {
 		return nativeLibPath, nil
 	}
 
-	var libPath string
-	switch runtime.GOARCH {
-	case "amd64":
-		libPath = filepath.Join(targetDir, "amd64", "libgopsutil_rs.so")
-	case "arm64":
-		libPath = filepath.Join(targetDir, "arm64", "libgopsutil_rs.so")
-	default:
-		return "", fmt.Errorf("GOARCH=%s is not supported", runtime.GOARCH)
-	}
-
-	// Check if file exists
-	if _, err := os.Stat(libPath); os.IsNotExist(err) {
-		return "", fmt.Errorf("library not found at %s, run 'make rust' to build", libPath)
-	}
-
-	return libPath, nil
+	return "", fmt.Errorf("library not found at %s, run 'make rust' to build", nativeLibPath)
 }
 
 // registerFunctions registers all the C functions from the Rust library
@@ -87,6 +72,7 @@ func (lib *Library) registerFunctions() error {
 
 	// Register disk usage functions
 	purego.RegisterLibFunc(&lib.diskUsage, lib.handle, "gopsutil_disk_usage")
+
 	purego.RegisterLibFunc(&lib.diskUsageByPartition, lib.handle, "gopsutil_disk_usage_by_partition")
 
 	// Register disk IO functions
@@ -147,10 +133,7 @@ func (lib *Library) GetDiskUsage(path string) (DiskUsageStat, error) {
 
 func (lib *Library) GetDiskUsageByPartition() (map[string]DiskUsageStat, error) {
 	m := make(map[string]DiskUsageStat)
-	outFn := func(name *string, usage *DiskUsageStat) {
-		m[*name] = *usage
-	}
-	if !lib.diskUsageByPartition(outFn) {
+	if !lib.diskUsageByPartition(gointernals.MapUnpack(m)) {
 		return nil, errors.New("failed to get disk usage by partition")
 	}
 	return m, nil
@@ -158,10 +141,7 @@ func (lib *Library) GetDiskUsageByPartition() (map[string]DiskUsageStat, error) 
 
 func (lib *Library) GetDiskIOByPartition() (map[string]DiskIOCountersStat, error) {
 	m := make(map[string]DiskIOCountersStat)
-	outFn := func(name *string, io *DiskIOCountersStat) {
-		m[*name] = *io
-	}
-	if !lib.diskIOByPartition(outFn) {
+	if !lib.diskIOByPartition(gointernals.MapUnpack(m)) {
 		return nil, errors.New("failed to get disk IO")
 	}
 	return m, nil
@@ -175,13 +155,14 @@ func (lib *Library) GetNetworkInfo() (NetIOCountersStat, error) {
 	return net, nil
 }
 
+var tempStatType = func() *abi.Type {
+	return gointernals.EfaceOf(TemperatureStat{}).Type
+}()
+
 func (lib *Library) GetTemperatures() (Sensors, error) {
-	m := make(Sensors, 0)
-	outFn := func(sensor *TemperatureStat) {
-		m = append(m, *sensor)
-	}
-	if !lib.temperatures(outFn) {
+	var s Sensors
+	if !lib.temperatures(&s, tempStatType) {
 		return nil, errors.New("failed to get temperatures")
 	}
-	return m, nil
+	return s, nil
 }

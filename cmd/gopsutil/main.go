@@ -61,9 +61,13 @@ func main() {
 	fmt.Printf("  Network Received: %s\n", formatBytes(network.BytesRecv))
 	fmt.Printf("  Network Upload Speed: %s\n", formatBytes(uint64(network.UploadSpeed)))
 	fmt.Printf("  Network Download Speed: %s\n", formatBytes(uint64(network.DownloadSpeed)))
+	fmt.Println()
+	fmt.Printf("  Temperatures (%d sensors):\n", len(temperatures))
 	for _, temperature := range temperatures {
 		fmt.Printf("  Temperature %s: %.2f°C (High: %.2f°C, Critical: %.2f°C)\n", temperature.SensorKey, temperature.Temperature, temperature.High, temperature.Critical)
 	}
+	fmt.Println()
+	fmt.Printf("  Disk Usage (%d partitions):\n", len(disk))
 	for name, usage := range disk {
 		fmt.Printf("  Disk Usage %s:\n", name)
 		fmt.Printf("    Device: %s\n", usage.Device)
@@ -73,6 +77,8 @@ func main() {
 		fmt.Printf("    Used: %s (%.2f%%)\n", formatBytes(usage.Used), usage.UsedPercent)
 		fmt.Printf("    Free: %s\n", formatBytes(usage.Free))
 	}
+	fmt.Println()
+	fmt.Printf("  Disk IO (%d devices):\n", len(diskIO))
 	for name, io := range diskIO {
 		fmt.Printf("  Disk IO %s:\n", name)
 		fmt.Printf("    Read Bytes: %s\n", formatBytes(io.ReadBytes))

@@ -2,7 +2,7 @@
 use std::ffi::c_longlong;
 use std::{
     collections::HashMap,
-    ffi::OsStr,
+    ffi::{OsStr, c_void},
     os::unix::ffi::OsStrExt,
     path::Path,
     slice,
@@ -16,12 +16,13 @@ pub type GoInt = c_longlong;
 #[cfg(target_pointer_width = "32")]
 pub type GoInt = c_int;
 
-// #[repr(C)]
-// pub struct GoSlice<T> {
-//     p: *const T,
-//     n: GoInt,
-//     cap: GoInt,
-// }
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct GoSlice<T> {
+    pub p: *const T,
+    pub n: GoInt,
+    pub cap: GoInt,
+}
 
 #[repr(C)]
 pub struct GoString {
@@ -29,18 +30,76 @@ pub struct GoString {
     n: GoInt,
 }
 
+#[repr(C)]
+pub struct GoType {
+    size: usize,
+    ptr_bytes: usize,
+    hash: u32,
+    tflag: u8,
+    align: u8,
+    field_align: u8,
+    kind: u8,
+    equal: extern "C" fn(a: *const (), b: *const ()) -> bool,
+    gcdata: *const u8,
+    str: i32,
+    ptr_to_this: i32,
+}
+
+pub type GoMapHeader = *const c_void;
+pub type GoMapType = *const c_void;
+
 // pub type GoByteSlice = GoSlice<u8>;
 
 // Vec<T> -> GoSlice<T>
-// impl<T> From<Vec<T>> for GoSlice<T> {
-//     fn from(vec: Vec<T>) -> Self {
-//         Self {
-//             p: vec.as_ptr(),
-//             n: vec.len() as GoInt,
-//             cap: vec.capacity() as GoInt,
-//         }
-//     }
-// }
+impl<T> From<Vec<T>> for GoSlice<T> {
+    fn from(vec: Vec<T>) -> Self {
+        Self {
+            p: vec.as_ptr(),
+            n: vec.len() as GoInt,
+            cap: vec.capacity() as GoInt,
+        }
+    }
+}
+
+// [T] -> GoSlice<T>
+impl<T> From<&[T]> for GoSlice<T> {
+    fn from(slice: &[T]) -> Self {
+        Self {
+            p: slice.as_ptr(),
+            n: slice.len() as GoInt,
+            cap: slice.len() as GoInt,
+        }
+    }
+}
+
+pub fn go_strmap_set(m: GoMapHeader, m_type: GoMapType, key: &GoString, value: *const c_void) {
+    unsafe { _go_strmap_set(m, m_type, key, value) };
+}
+
+pub fn go_slice_clone_into<T>(
+    dst: *const GoSlice<T>,
+    src: *const GoSlice<T>,
+    elem_type: *const GoType,
+) {
+    unsafe {
+        _go_slice_clone_into(
+            dst as *const GoSlice<c_void>,
+            src as *const GoSlice<c_void>,
+            elem_type,
+        )
+    }
+}
+
+unsafe extern "C" {
+    #[link_name = "StrMapSet"]
+    pub fn _go_strmap_set(m: GoMapHeader, m_type: GoMapType, key: &GoString, value: *const c_void);
+    #[link_name = "SliceCloneInto"]
+    pub fn _go_slice_clone_into(
+        dst: *const GoSlice<c_void>,
+        src: *const GoSlice<c_void>,
+        elem_type: *const GoType,
+    );
+}
 
 // &GoString -> &OsStr
 impl From<&GoString> for &OsStr {
@@ -118,6 +177,11 @@ impl From<&OsStr> for GoString {
             n: interned.len() as GoInt,
         }
     }
+}
+
+// anything -> *const ()
+pub fn any_to_c_void<T>(any: &T) -> *const c_void {
+    any as *const T as *const c_void
 }
 
 // Static string interning system - strings live forever, same content allocated once.
