@@ -41,12 +41,29 @@ func main() {
 		log.Fatalf("Failed to get disk IO: %v", err)
 	}
 
+	network, err := lib.GetNetworkInfo()
+	if err != nil {
+		log.Fatalf("Failed to get network info: %v", err)
+	}
+
+	temperatures, err := lib.GetTemperatures()
+	if err != nil {
+		log.Fatalf("Failed to get temperatures: %v", err)
+	}
+
 	fmt.Printf("System Information:\n")
 	fmt.Printf("  CPU Usage:      %.2f%%\n", cpu)
 	fmt.Printf("  Memory Total:   %s\n", formatBytes(memory.Total))
 	fmt.Printf("  Memory Used:    %s (%.2f%%)\n",
 		formatBytes(memory.Used), memory.UsedPercent)
 	fmt.Printf("  Memory Available: %s\n", formatBytes(memory.Available))
+	fmt.Printf("  Network Sent: %s\n", formatBytes(network.BytesSent))
+	fmt.Printf("  Network Received: %s\n", formatBytes(network.BytesRecv))
+	fmt.Printf("  Network Upload Speed: %s\n", formatBytes(uint64(network.UploadSpeed)))
+	fmt.Printf("  Network Download Speed: %s\n", formatBytes(uint64(network.DownloadSpeed)))
+	for _, temperature := range temperatures {
+		fmt.Printf("  Temperature %s: %.2f°C (High: %.2f°C, Critical: %.2f°C)\n", temperature.SensorKey, temperature.Temperature, temperature.High, temperature.Critical)
+	}
 	for name, usage := range disk {
 		fmt.Printf("  Disk Usage %s:\n", name)
 		fmt.Printf("    Device: %s\n", usage.Device)

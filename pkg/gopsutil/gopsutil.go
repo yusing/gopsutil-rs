@@ -20,8 +20,10 @@ type Library struct {
 	cpuPercent           func(out *float32) bool
 	memory               func(out *Memory) bool
 	diskUsage            func(path *string, out *DiskUsageStat) bool
-	diskUsageByPartition func(outFn func(*string, *DiskUsageStat)) bool
-	diskIOByPartition    func(outFn func(*string, *DiskIOCountersStat)) bool
+	diskUsageByPartition func(yield func(*string, *DiskUsageStat)) bool
+	diskIOByPartition    func(yield func(*string, *DiskIOCountersStat)) bool
+	network              func(out *NetIOCountersStat) bool
+	temperatures         func(yield func(*TemperatureStat)) bool
 }
 
 func New() (*Library, error) {
@@ -90,45 +92,13 @@ func (lib *Library) registerFunctions() error {
 	// Register disk IO functions
 	purego.RegisterLibFunc(&lib.diskIOByPartition, lib.handle, "gopsutil_disk_io_counters_by_partition")
 
+	// Register network functions
+	purego.RegisterLibFunc(&lib.network, lib.handle, "gopsutil_net_io_counters")
+
+	// Register temperatures functions
+	purego.RegisterLibFunc(&lib.temperatures, lib.handle, "gopsutil_temperatures")
+
 	return nil
-}
-
-func (lib *Library) GetMemoryInfo() (*Memory, error) {
-	var mem Memory
-	if !lib.memory(&mem) {
-		return nil, fmt.Errorf("failed to get memory info")
-	}
-	return &mem, nil
-}
-
-func (lib *Library) GetDiskUsage(path string) (*DiskUsageStat, error) {
-	var usage DiskUsageStat
-	if !lib.diskUsage(&path, &usage) {
-		return nil, fmt.Errorf("failed to get disk usage for path %s", path)
-	}
-	return &usage, nil
-}
-
-func (lib *Library) GetDiskUsageByPartition() (map[string]DiskUsageStat, error) {
-	m := make(map[string]DiskUsageStat)
-	outFn := func(name *string, usage *DiskUsageStat) {
-		m[*name] = *usage
-	}
-	if !lib.diskUsageByPartition(outFn) {
-		return nil, errors.New("failed to get disk usage by partition")
-	}
-	return m, nil
-}
-
-func (lib *Library) GetDiskIOByPartition() (map[string]DiskIOCountersStat, error) {
-	m := make(map[string]DiskIOCountersStat)
-	outFn := func(name *string, io *DiskIOCountersStat) {
-		m[*name] = *io
-	}
-	if !lib.diskIOByPartition(outFn) {
-		return nil, errors.New("failed to get disk IO")
-	}
-	return m, nil
 }
 
 // Close closes the library handle
@@ -157,4 +127,61 @@ func (lib *Library) GetCPUPercent(ctx context.Context, interval time.Duration) (
 		return 0, errors.New("failed to get CPU percent")
 	}
 	return percent, nil
+}
+
+func (lib *Library) GetMemoryInfo() (Memory, error) {
+	var mem Memory
+	if !lib.memory(&mem) {
+		return mem, fmt.Errorf("failed to get memory info")
+	}
+	return mem, nil
+}
+
+func (lib *Library) GetDiskUsage(path string) (DiskUsageStat, error) {
+	var usage DiskUsageStat
+	if !lib.diskUsage(&path, &usage) {
+		return usage, fmt.Errorf("failed to get disk usage for path %s", path)
+	}
+	return usage, nil
+}
+
+func (lib *Library) GetDiskUsageByPartition() (map[string]DiskUsageStat, error) {
+	m := make(map[string]DiskUsageStat)
+	outFn := func(name *string, usage *DiskUsageStat) {
+		m[*name] = *usage
+	}
+	if !lib.diskUsageByPartition(outFn) {
+		return nil, errors.New("failed to get disk usage by partition")
+	}
+	return m, nil
+}
+
+func (lib *Library) GetDiskIOByPartition() (map[string]DiskIOCountersStat, error) {
+	m := make(map[string]DiskIOCountersStat)
+	outFn := func(name *string, io *DiskIOCountersStat) {
+		m[*name] = *io
+	}
+	if !lib.diskIOByPartition(outFn) {
+		return nil, errors.New("failed to get disk IO")
+	}
+	return m, nil
+}
+
+func (lib *Library) GetNetworkInfo() (NetIOCountersStat, error) {
+	var net NetIOCountersStat
+	if !lib.network(&net) {
+		return net, errors.New("failed to get network info")
+	}
+	return net, nil
+}
+
+func (lib *Library) GetTemperatures() (Sensors, error) {
+	m := make(Sensors, 0)
+	outFn := func(sensor *TemperatureStat) {
+		m = append(m, *sensor)
+	}
+	if !lib.temperatures(outFn) {
+		return nil, errors.New("failed to get temperatures")
+	}
+	return m, nil
 }

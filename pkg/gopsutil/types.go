@@ -44,7 +44,6 @@ type DiskIOCountersStat struct {
 } // @name DiskIOCountersStat
 
 type NetIOCountersStat struct {
-	Name      string `json:"name"`       // interface name
 	BytesSent uint64 `json:"bytes_sent"` // number of bytes sent
 	BytesRecv uint64 `json:"bytes_recv"` // number of bytes received
 

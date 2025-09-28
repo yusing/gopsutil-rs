@@ -1,8 +1,7 @@
 mod gotypes;
 
-use psutil::disk::DiskIoCounters;
 pub use psutil::*;
-use std::{collections::HashMap, ffi::OsStr, os::raw::c_float, sync::LazyLock, time::Instant};
+use std::{ffi::OsStr, os::raw::c_float, sync::LazyLock};
 
 use crate::gotypes::GoString;
 
@@ -80,7 +79,7 @@ pub extern "C" fn gopsutil_disk_usage(path: &GoString, out: &mut DiskUsageStat) 
 
 #[unsafe(no_mangle)]
 pub extern "C" fn gopsutil_disk_usage_by_partition(
-    out_fn: extern "C" fn(&GoString, &DiskUsageStat),
+    yield_fn: extern "C" fn(&GoString, &DiskUsageStat),
 ) -> bool {
     match psutil::disk::partitions_physical() {
         Ok(partitions) => {
@@ -95,7 +94,7 @@ pub extern "C" fn gopsutil_disk_usage_by_partition(
                         used: usage.used(),
                         used_percent: usage.percent(),
                     };
-                    out_fn(&partition.mountpoint().into(), stats);
+                    yield_fn(&partition.mountpoint().into(), stats);
                 }
             }
             true
@@ -111,58 +110,58 @@ pub struct DiskIOCountersStat {
     write_bytes: u64,
     read_count: u64,
     write_count: u64,
-    iops: u64,
-    read_speed: f32,
-    write_speed: f32,
+    // iops: u64,
+    // read_speed: f32,
+    // write_speed: f32,
 }
 
-struct DiskIOState {
-    last_counters: HashMap<String, DiskIoCounters>,
-    last_time: Instant,
-}
+// struct DiskIOState {
+//     last_counters: HashMap<String, DiskIoCounters>,
+//     last_time: Instant,
+// }
 
-impl DiskIOState {
-    fn new() -> Self {
-        Self {
-            last_counters: HashMap::new(),
-            last_time: Instant::now(),
-        }
-    }
+// impl DiskIOState {
+//     fn new() -> Self {
+//         Self {
+//             last_counters: HashMap::new(),
+//             last_time: Instant::now(),
+//         }
+//     }
 
-    fn get_last_counters(&self) -> &HashMap<String, DiskIoCounters> {
-        &self.last_counters
-    }
+//     fn get_last_counters(&self) -> &HashMap<String, DiskIoCounters> {
+//         &self.last_counters
+//     }
 
-    fn get_last_time(&self) -> Instant {
-        self.last_time
-    }
+//     fn get_last_time(&self) -> Instant {
+//         self.last_time
+//     }
 
-    fn set_last_counters(&mut self, counters: HashMap<String, DiskIoCounters>) {
-        self.last_counters = counters;
-    }
+//     fn set_last_counters(&mut self, counters: HashMap<String, DiskIoCounters>) {
+//         self.last_counters = counters;
+//     }
 
-    fn set_last_time(&mut self, time: Instant) {
-        self.last_time = time;
-    }
+//     fn set_last_time(&mut self, time: Instant) {
+//         self.last_time = time;
+//     }
 
-    fn calc_io(&self, io: &mut DiskIOCountersStat, ts: Instant) {
-        let last_time = self.get_last_time();
-        let elapsed = ts.duration_since(last_time);
-        let name: &str = (&io.name).into();
-        if let Some(counters) = self.get_last_counters().get(name) {
-            io.read_speed =
-                ((io.read_bytes - counters.read_bytes()) as f32) / elapsed.as_secs_f32();
-            io.write_speed =
-                ((io.write_bytes - counters.write_bytes()) as f32) / elapsed.as_secs_f32();
-            // just in case, use abs_diff instead of -
-            let rps = io.read_count.abs_diff(counters.read_count()) / elapsed.as_secs();
-            let wps = io.write_count.abs_diff(counters.write_count()) / elapsed.as_secs();
-            io.iops = rps + wps;
-        }
-    }
-}
+//     fn calc_io(&self, io: &mut DiskIOCountersStat, ts: Instant) {
+//         let last_time = self.get_last_time();
+//         let elapsed = ts.duration_since(last_time);
+//         let name: &str = (&io.name).into();
+//         if let Some(counters) = self.get_last_counters().get(name) {
+//             io.read_speed =
+//                 ((io.read_bytes - counters.read_bytes()) as f32) / elapsed.as_secs_f32();
+//             io.write_speed =
+//                 ((io.write_bytes - counters.write_bytes()) as f32) / elapsed.as_secs_f32();
+//             // just in case, use abs_diff instead of -
+//             let rps = io.read_count.abs_diff(counters.read_count()) / elapsed.as_secs();
+//             let wps = io.write_count.abs_diff(counters.write_count()) / elapsed.as_secs();
+//             io.iops = rps + wps;
+//         }
+//     }
+// }
 
-static mut DISK_IO_STATE: LazyLock<DiskIOState> = std::sync::LazyLock::new(DiskIOState::new);
+// static mut DISK_IO_STATE: LazyLock<DiskIOState> = std::sync::LazyLock::new(DiskIOState::new);
 
 fn should_exclude_disk(name: &str) -> bool {
     // include only sd* and nvme* disk devices / partitions
@@ -197,11 +196,11 @@ fn should_exclude_disk(name: &str) -> bool {
 #[unsafe(no_mangle)]
 #[allow(static_mut_refs)]
 pub extern "C" fn gopsutil_disk_io_counters_by_partition(
-    out_fn: extern "C" fn(&GoString, &DiskIOCountersStat),
+    yield_fn: extern "C" fn(&GoString, &DiskIOCountersStat),
 ) -> bool {
     match unsafe { DISK_IO_COUNTERS_COLLECTOR.disk_io_counters_per_partition() } {
         Ok(partitions) => {
-            let now = Instant::now();
+            // let now = Instant::now();
             for (partition, io) in &partitions {
                 if should_exclude_disk(partition) {
                     continue;
@@ -212,19 +211,131 @@ pub extern "C" fn gopsutil_disk_io_counters_by_partition(
                     write_bytes: io.write_bytes(),
                     read_count: io.read_count(),
                     write_count: io.write_count(),
-                    iops: 0,
-                    read_speed: 0.0,
-                    write_speed: 0.0,
+                    // iops: 0,
+                    // read_speed: 0.0,
+                    // write_speed: 0.0,
                 };
-                unsafe { DISK_IO_STATE.calc_io(counters, now) };
-                out_fn(&partition.into(), counters);
+                // unsafe { DISK_IO_STATE.calc_io(counters, now) };
+                yield_fn(&partition.into(), counters);
             }
-            unsafe {
-                DISK_IO_STATE.set_last_counters(partitions);
-                DISK_IO_STATE.set_last_time(now);
-            }
+            // unsafe {
+            //     DISK_IO_STATE.set_last_counters(partitions);
+            //     DISK_IO_STATE.set_last_time(now);
+            // }
             true
         }
         Err(_) => false,
     }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct NetIOCountersStat {
+    bytes_sent: u64,
+    bytes_recv: u64,
+    // upload_speed: f32,
+    // download_speed: f32,
+}
+
+// struct NetIOState {
+//     last_counter: NetIOCountersStat,
+//     last_time: Instant,
+// }
+
+// impl NetIOState {
+//     fn new() -> Self {
+//         Self {
+//             last_counter: NetIOCountersStat {
+//                 bytes_sent: 0,
+//                 bytes_recv: 0,
+//                 upload_speed: 0.0,
+//                 download_speed: 0.0,
+//             },
+//             last_time: Instant::now(),
+//         }
+//     }
+
+//     fn get_last_counter(&self) -> &NetIOCountersStat {
+//         &self.last_counter
+//     }
+
+//     fn get_last_time(&self) -> Instant {
+//         self.last_time
+//     }
+
+//     fn set_last_counter(&mut self, counter: NetIOCountersStat) {
+//         self.last_counter = counter;
+//     }
+
+//     fn set_last_time(&mut self, time: Instant) {
+//         self.last_time = time;
+//     }
+
+//     fn calc_io(&self, counters: &mut NetIOCountersStat, ts: Instant) {
+//         let last_time = self.get_last_time();
+//         let elapsed = ts.duration_since(last_time);
+//         let last = self.get_last_counter();
+//         counters.upload_speed =
+//             ((counters.bytes_sent - last.bytes_sent) as f32) / elapsed.as_secs_f32();
+//         counters.download_speed =
+//             ((counters.bytes_recv - last.bytes_recv) as f32) / elapsed.as_secs_f32();
+//     }
+// }
+
+// static mut NET_IO_STATE: LazyLock<NetIOState> = std::sync::LazyLock::new(NetIOState::new);
+static mut NET_IO_COUNTERS_COLLECTOR: LazyLock<psutil::network::NetIoCountersCollector> =
+    std::sync::LazyLock::new(psutil::network::NetIoCountersCollector::default);
+
+#[unsafe(no_mangle)]
+#[allow(static_mut_refs)]
+pub extern "C" fn gopsutil_net_io_counters(out: &mut NetIOCountersStat) -> bool {
+    match unsafe { NET_IO_COUNTERS_COLLECTOR.net_io_counters() } {
+        Ok(counters) => {
+            // let now = Instant::now();
+            out.bytes_sent = counters.bytes_sent();
+            out.bytes_recv = counters.bytes_recv();
+            // unsafe {
+            //     NET_IO_STATE.calc_io(out, now);
+            //     NET_IO_STATE.set_last_counter(*out);
+            //     NET_IO_STATE.set_last_time(now);
+            // }
+            true
+        }
+        Err(_) => false,
+    }
+}
+
+#[repr(C)]
+pub struct TemperatureStat {
+    sensor_key: GoString,
+    temperature: f32,
+    high: f32,
+    critical: f32,
+}
+
+pub fn format_sensor_key(sensor: &psutil::sensors::TemperatureSensor) -> String {
+    if let Some(label) = sensor.label() {
+        format!(
+            "{}_{}",
+            sensor.unit(),
+            label.replace(" ", "_").to_lowercase()
+        )
+    } else {
+        sensor.unit().to_string()
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn gopsutil_temperatures(yield_fn: extern "C" fn(&TemperatureStat)) -> bool {
+    for sensor in psutil::sensors::temperatures() {
+        if let Ok(sensor) = sensor {
+            yield_fn(&TemperatureStat {
+                sensor_key: format_sensor_key(&sensor).into(),
+                temperature: sensor.current().celsius() as f32,
+                high: sensor.high().map_or(0.0, |t| t.celsius()) as f32,
+                critical: sensor.critical().map_or(0.0, |t| t.celsius()) as f32,
+            });
+        }
+    }
+    true
 }

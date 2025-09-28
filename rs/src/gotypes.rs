@@ -31,6 +31,17 @@ pub struct GoString {
 
 // pub type GoByteSlice = GoSlice<u8>;
 
+// Vec<T> -> GoSlice<T>
+// impl<T> From<Vec<T>> for GoSlice<T> {
+//     fn from(vec: Vec<T>) -> Self {
+//         Self {
+//             p: vec.as_ptr(),
+//             n: vec.len() as GoInt,
+//             cap: vec.capacity() as GoInt,
+//         }
+//     }
+// }
+
 // &GoString -> &OsStr
 impl From<&GoString> for &OsStr {
     fn from(go_string: &GoString) -> Self {
@@ -51,6 +62,17 @@ impl From<&GoString> for &str {
 impl From<&GoString> for String {
     fn from(go_string: &GoString) -> Self {
         String::from_str(go_string.into()).unwrap()
+    }
+}
+
+// String -> GoString
+impl From<String> for GoString {
+    fn from(string: String) -> Self {
+        let interned = intern_string(string.as_str());
+        Self {
+            p: interned.as_ptr(),
+            n: interned.len() as GoInt,
+        }
     }
 }
 
