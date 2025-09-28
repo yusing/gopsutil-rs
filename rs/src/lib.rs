@@ -327,15 +327,13 @@ pub fn format_sensor_key(sensor: &psutil::sensors::TemperatureSensor) -> String 
 
 #[unsafe(no_mangle)]
 pub extern "C" fn gopsutil_temperatures(yield_fn: extern "C" fn(&TemperatureStat)) -> bool {
-    for sensor in psutil::sensors::temperatures() {
-        if let Ok(sensor) = sensor {
-            yield_fn(&TemperatureStat {
-                sensor_key: format_sensor_key(&sensor).into(),
-                temperature: sensor.current().celsius() as f32,
-                high: sensor.high().map_or(0.0, |t| t.celsius()) as f32,
-                critical: sensor.critical().map_or(0.0, |t| t.celsius()) as f32,
-            });
-        }
+    for sensor in psutil::sensors::temperatures().into_iter().flatten() {
+        yield_fn(&TemperatureStat {
+            sensor_key: format_sensor_key(&sensor).into(),
+            temperature: sensor.current().celsius() as f32,
+            high: sensor.high().map_or(0.0, |t| t.celsius()) as f32,
+            critical: sensor.critical().map_or(0.0, |t| t.celsius()) as f32,
+        });
     }
     true
 }
