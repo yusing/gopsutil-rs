@@ -155,9 +155,7 @@ func (lib *Library) GetNetworkInfo() (NetIOCountersStat, error) {
 	return net, nil
 }
 
-var tempStatType = func() *abi.Type {
-	return gointernals.EfaceOf(TemperatureStat{}).Type
-}()
+var tempStatType = gointernals.TypeOf(TemperatureStat{})
 
 func (lib *Library) GetTemperatures() (Sensors, error) {
 	var s Sensors

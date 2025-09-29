@@ -186,7 +186,7 @@ pub fn intern_string(s: &str) -> GoString {
     {
         let map = STRING_INTERNER.read().unwrap();
         if let Some(&interned) = map.get(s) {
-            GoString {
+            return GoString {
                 p: interned.as_ptr(),
                 n: interned.len() as GoInt,
             };
