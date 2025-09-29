@@ -79,9 +79,10 @@ pub extern "C" fn gopsutil_disk_usage(path: &GoString, out: &mut DiskUsageStat) 
 
 #[unsafe(no_mangle)]
 pub extern "C" fn gopsutil_disk_usage_by_partition(
-    m: gotypes::GoMapHeader,
-    m_type: gotypes::GoMapType,
+    m: &gotypes::GoMapHeader,
+    m_type: &gotypes::GoMapType,
 ) -> bool {
+    assert_eq!(m_type.elem.size, std::mem::size_of::<DiskUsageStat>());
     match psutil::disk::partitions_physical() {
         Ok(partitions) => {
             for partition in &partitions {
@@ -98,8 +99,8 @@ pub extern "C" fn gopsutil_disk_usage_by_partition(
                     gotypes::go_strmap_set(
                         m,
                         m_type,
-                        &partition.mountpoint().into(),
-                        gotypes::any_to_c_void(stats),
+                        partition.mountpoint().into(),
+                        gotypes::any_to_go_ptr(stats),
                     )
                 }
             }
@@ -116,9 +117,10 @@ pub struct DiskIOCountersStat {
     write_bytes: u64,
     read_count: u64,
     write_count: u64,
-    // iops: u64,
-    // read_speed: f32,
-    // write_speed: f32,
+    // below will be calculated in the caller
+    iops: u64,
+    read_speed: f32,
+    write_speed: f32,
 }
 
 // struct DiskIOState {
@@ -202,9 +204,10 @@ fn should_exclude_disk(name: &str) -> bool {
 #[unsafe(no_mangle)]
 #[allow(static_mut_refs)]
 pub extern "C" fn gopsutil_disk_io_counters_by_partition(
-    m: gotypes::GoMapHeader,
-    m_type: gotypes::GoMapType,
+    m: &gotypes::GoMapHeader,
+    m_type: &gotypes::GoMapType,
 ) -> bool {
+    assert_eq!(m_type.elem.size, std::mem::size_of::<DiskIOCountersStat>());
     match unsafe { DISK_IO_COUNTERS_COLLECTOR.disk_io_counters_per_partition() } {
         Ok(partitions) => {
             // let now = Instant::now();
@@ -218,16 +221,16 @@ pub extern "C" fn gopsutil_disk_io_counters_by_partition(
                     write_bytes: io.write_bytes(),
                     read_count: io.read_count(),
                     write_count: io.write_count(),
-                    // iops: 0,
-                    // read_speed: 0.0,
-                    // write_speed: 0.0,
+                    iops: 0,
+                    read_speed: 0.0,
+                    write_speed: 0.0,
                 };
                 // unsafe { DISK_IO_STATE.calc_io(counters, now) };
                 gotypes::go_strmap_set(
                     m,
                     m_type,
-                    &partition.into(),
-                    gotypes::any_to_c_void(counters),
+                    partition.into(),
+                    gotypes::any_to_go_ptr(counters),
                 );
             }
             // unsafe {
@@ -245,8 +248,8 @@ pub extern "C" fn gopsutil_disk_io_counters_by_partition(
 pub struct NetIOCountersStat {
     bytes_sent: u64,
     bytes_recv: u64,
-    // upload_speed: f32,
-    // download_speed: f32,
+    upload_speed: f32,
+    download_speed: f32,
 }
 
 // struct NetIOState {
@@ -339,12 +342,12 @@ pub fn format_sensor_key(sensor: &psutil::sensors::TemperatureSensor) -> String 
 
 #[unsafe(no_mangle)]
 pub extern "C" fn gopsutil_temperatures(
-    out: &gotypes::GoSlice<TemperatureStat>,
+    out: &gotypes::GoSlice,
     elem_type: &gotypes::GoType,
 ) -> bool {
-    let stats: Vec<TemperatureStat> = psutil::sensors::temperatures()
-        .into_iter()
-        .flatten()
+    assert_eq!(elem_type.size, std::mem::size_of::<TemperatureStat>());
+    let flattened = psutil::sensors::temperatures().into_iter().flatten();
+    let stats: Vec<TemperatureStat> = flattened
         .map(|sensor| TemperatureStat {
             sensor_key: format_sensor_key(&sensor).into(),
             temperature: sensor.current().celsius() as f32,
@@ -352,6 +355,7 @@ pub extern "C" fn gopsutil_temperatures(
             critical: sensor.critical().map_or(0.0, |t| t.celsius()) as f32,
         })
         .collect();
-    gotypes::go_slice_clone_into(out, &stats.into(), elem_type);
+    let stats_slice: gotypes::GoSlice = stats.as_slice().into();
+    gotypes::go_slice_clone_into(out, &stats_slice, elem_type);
     true
 }

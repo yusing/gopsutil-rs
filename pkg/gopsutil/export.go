@@ -9,8 +9,8 @@ import (
 
 //export StrMapSet
 //go:linkname StrMapSet gointernals.StrMapSet
-func StrMapSet(m unsafe.Pointer, mType unsafe.Pointer, key unsafe.Pointer, value unsafe.Pointer)
+func StrMapSet(m, mType unsafe.Pointer, key string, value unsafe.Pointer)
 
 //export SliceCloneInto
 //go:linkname SliceCloneInto gointernals.SliceCloneInto
-func SliceCloneInto(dst unsafe.Pointer, src unsafe.Pointer, elemType unsafe.Pointer)
+func SliceCloneInto(dst, src, elemType unsafe.Pointer)
